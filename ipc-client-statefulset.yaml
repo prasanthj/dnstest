@@ -1,0 +1,103 @@
+#apiVersion: networking.istio.io/v1alpha3
+#kind: DestinationRule
+#metadata:
+#  name: client-destination-rule
+#spec:
+#  host: "client-service.cluster.svc.cluster.local"
+#  trafficPolicy:
+#    connectionPool:
+#      http:
+#        http1MaxPendingRequests: 600000
+#        http2MaxRequests: 600000
+#        maxRequestsPerConnection: 600000
+#        maxRetries: 600000
+#      tcp:
+#        maxConnections: 600000
+#    tls:
+#      mode: ISTIO_MUTUAL
+#---
+#apiVersion: authentication.istio.io/v1alpha1
+#kind: Policy
+#metadata:
+#  name: client
+#spec:
+#  targets:
+#    - name: client-service
+#  peers:
+#    - mtls: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-service
+  labels:
+    app: client
+  annotations:
+    "networking.istio.io/exportTo": "."
+spec:
+  ports:
+  - port: 8888
+    name: ipc-client
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: client
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ipc-client
+spec:
+  serviceName: "client-service"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client
+  template:
+    metadata:
+      labels:
+        app: client
+      # annotations:
+      #   sidecar.istio.io/inject: "false"
+      #   traffic.sidecar.istio.io/includeInboundPorts: "*"
+      #   traffic.sidecar.istio.io/excludeInboundPorts: "8080,8888"
+    spec:
+      imagePullSecrets:
+        - name: docker-image-pull-secret
+      terminationGracePeriodSeconds: 3
+      initContainers:
+      - name: "sysctl"
+        image: "busybox"
+        imagePullPolicy: IfNotPresent
+        command: ['sh', '-c', 'sysctl -w net.core.somaxconn=16000 && sysctl -w net.ipv4.tcp_max_syn_backlog=16000 && sysctl -w net.ipv4.tcp_fin_timeout=5 && sysctl -w vm.swappiness=0']
+        securityContext:
+          runAsUser: 0
+          privileged: true
+      containers:
+      - name: client
+        image: hortonworks/dnstest:1.0-SNAPSHOT
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 8888
+            name: web
+        env:
+          - name: NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: MAIN_CLASS
+            value: HttpPingClient
+          - name: SERVER_HOSTNAME_PATTERN
+            value: "ipc-server-%d.server-service.%s.svc.cluster.local"
+          - name: SERVER_PORT
+            value: "9999"
+          - name: SERVER_CONCURRENCY
+            value: "20"
+          - name: ITERATIONS
+            value: "20"
+          - name: INTERVAL
+            value: "100"
+          - name: MAIN_CLASS
+            value: "PingRPCClient"
+          - name: INITIAL_SLEEP
+            value: "5"

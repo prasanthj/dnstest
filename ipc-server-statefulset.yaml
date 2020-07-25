@@ -1,0 +1,85 @@
+#apiVersion: networking.istio.io/v1alpha3
+#kind: DestinationRule
+#metadata:
+#  name: server-destination-rule
+#spec:
+#  host: "server-service.cluster.svc.cluster.local"
+#  trafficPolicy:
+#    connectionPool:
+#      http:
+#        http1MaxPendingRequests: 60000
+#      tcp:
+#        maxConnections: 60000
+#    tls:
+#      mode: ISTIO_MUTUAL
+#---
+#apiVersion: authentication.istio.io/v1alpha1
+#kind: Policy
+#metadata:
+#  name: server
+#spec:
+#  targets:
+#    - name: server-service
+#  peers:
+#    - mtls: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server-service
+  labels:
+    app: server
+  annotations:
+    "networking.istio.io/exportTo": "."
+spec:
+  ports:
+  - port: 9999
+    name: ipc
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: server
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ipc-server
+spec:
+  serviceName: "server-service"
+  replicas: 20
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: server
+  template:
+    metadata:
+      labels:
+        app: server
+      # annotations:
+      #   sidecar.istio.io/inject: "true"
+      #   traffic.sidecar.istio.io/includeInboundPorts: "*"
+      #   traffic.sidecar.istio.io/excludeInboundPorts: "8080,8888"
+    spec:
+      imagePullSecrets:
+      - name: docker-image-pull-secret
+      terminationGracePeriodSeconds: 3
+      initContainers:
+      - name: "sysctl"
+        image: "busybox"
+        imagePullPolicy: IfNotPresent
+        command: ['sh', '-c', 'sysctl -w net.core.somaxconn=16000 && sysctl -w net.ipv4.tcp_max_syn_backlog=16000 && sysctl -w net.ipv4.tcp_fin_timeout=5 && sysctl -w vm.swappiness=0']
+        securityContext:
+          runAsUser: 0
+          privileged: true
+      containers:
+      - name: server
+        image: hortonworks/dnstest:1.0-SNAPSHOT
+        imagePullPolicy: Always
+        env:
+          - name: SERVER_PORT
+            value: "9999"
+          - name: MAIN_CLASS
+            value: "PingRPCServer"
+        ports:
+        - containerPort: 9999
+          name: ipc

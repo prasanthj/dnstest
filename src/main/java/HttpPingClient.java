@@ -84,7 +84,6 @@ public class HttpPingClient {
               is.close();
               int code = connection.getResponseCode();
               final long end = System.currentTimeMillis();
-              connection.disconnect();
               System.out.println(
                 "Code: " + code + " Thread: " + Thread.currentThread().getId() + " Iteration: " + finalI +
                   " Host: " + destHost[0] + ":" + finalDestPort + " Time: " + (end - start) + "ms");
@@ -109,6 +108,10 @@ public class HttpPingClient {
                   "Connection to " + destHost[0] + ":" + finalDestPort + " failed in " + (end - start) + "ms! " +
                     "Code: " + respCode + " Msg: " + e.getMessage());
               // e.printStackTrace();
+            } finally {
+              if (connection != null) {
+                connection.disconnect();
+              }
             }
           }
 
