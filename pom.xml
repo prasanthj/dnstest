@@ -11,7 +11,7 @@
         <docker.repo>hortonworks</docker.repo>
         <docker.url>https://index.docker.io/</docker.url>
         <docker.user>prasanthj</docker.user>
-        <docker.password>5aaa4bc1-f703-4f5d-bbe0-5e0e29e3dfb6</docker.password>
+        <docker.password>DOCKER-PASSWORD</docker.password>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
