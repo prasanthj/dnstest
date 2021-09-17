@@ -1,16 +1,27 @@
-import java.net.InetSocketAddress;
-import java.util.Random;
-
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ipc.RPC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.util.Random;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Created by prasanthj on 2020-06-19.
  */
 public class PingRPCClient {
   public static final Logger LOG = LoggerFactory.getLogger(PingRPCClient.class);
+  public static AtomicLong unknownHostsCount = new AtomicLong(0);
+  public static AtomicLong connectionResetCount = new AtomicLong(0);
+  public static AtomicLong ioExceptionCount = new AtomicLong(0);
+  public static AtomicLong otherExceptionCount = new AtomicLong(0);
   public static void main(String[] args) throws InterruptedException {
     String destHostEnv = System.getenv("SERVER_HOST");
     String destPortEnv = System.getenv("SERVER_PORT");
@@ -33,6 +44,8 @@ public class PingRPCClient {
     if (iterationsEnv != null && !iterationsEnv.isEmpty()) {
       iterations = Integer.parseInt(iterationsEnv);
     }
+
+    startScheduledExecutor();
     Random random = new Random(123);
     for (int i = 0; i < iterations; i++) {
       final String destHostNamePattern = System.getenv("SERVER_HOSTNAME_PATTERN");
@@ -66,10 +79,25 @@ public class PingRPCClient {
               PingRPC ping = RPC.getProxy(PingRPC.class,
                 RPC.getProtocolVersion(PingRPC.class),
                 inetAddress, new Configuration());
-              LOG.info("Pinging host: " + destHost[0] + ":" + finalDestPort);
+//              LOG.info("Pinging host: " + destHost[0] + ":" + finalDestPort);
               LOG.info("Ping host: " + destHost[0] + ":" + finalDestPort + " returned -> " + ping.ping());
             } catch (Exception e) {
-              LOG.error("", e);
+              LOG.debug("", e);
+              if (ExceptionUtils.getRootCause(e) instanceof UnknownHostException) {
+                long count = unknownHostsCount.incrementAndGet();
+                LOG.warn("#UnknownHostExceptions: " + count);
+              } else if (ExceptionUtils.getRootCause(e) instanceof IOException) {
+                if (ExceptionUtils.getRootCauseMessage(e).contains("Connection reset by peer")) {
+                  long count = connectionResetCount.incrementAndGet();
+                  LOG.info("#ConnectionResets: " + count);
+                } else {
+                  long count = ioExceptionCount.incrementAndGet();
+                  LOG.info("#IOExceptions: " + count);
+                }
+              } else {
+                long count = otherExceptionCount.incrementAndGet();
+                LOG.info("#OtherExceptions: " + count);
+              }
             }
           }
         });
@@ -77,9 +105,19 @@ public class PingRPCClient {
       }
     }
 
-    LOG.info("Done iterations!");
-    while (true) {
-      // so that docker image continues to run
-    }
+    LOG.info("Submitted all iterations!");
+    // so that docker image continues to run
+    Thread.sleep(1_000_000_000L);
+  }
+
+  private static void startScheduledExecutor() {
+    ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+    executor.scheduleAtFixedRate(new Runnable() {
+      @Override
+      public void run() {
+        LOG.warn("#UnknownHostExceptions: " + unknownHostsCount.get() + " #ConnectionResets: " + connectionResetCount.get()
+                + " #IOExceptions: " + ioExceptionCount.get() + " #OtherExceptions: " + otherExceptionCount.get());
+      }
+    }, 0,10, TimeUnit.SECONDS);
   }
 }

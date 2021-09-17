@@ -57,22 +57,23 @@ spec:
     metadata:
       labels:
         app: client
-      # annotations:
-      #   sidecar.istio.io/inject: "false"
+        chartName: query-executor
+      annotations:
+        sidecar.istio.io/inject: "false"
       #   traffic.sidecar.istio.io/includeInboundPorts: "*"
       #   traffic.sidecar.istio.io/excludeInboundPorts: "8080,8888"
     spec:
       imagePullSecrets:
         - name: docker-image-pull-secret
-      terminationGracePeriodSeconds: 3
-      initContainers:
-      - name: "sysctl"
-        image: "busybox"
-        imagePullPolicy: IfNotPresent
-        command: ['sh', '-c', 'sysctl -w net.core.somaxconn=16000 && sysctl -w net.ipv4.tcp_max_syn_backlog=16000 && sysctl -w net.ipv4.tcp_fin_timeout=5 && sysctl -w vm.swappiness=0']
-        securityContext:
-          runAsUser: 0
-          privileged: true
+      terminationGracePeriodSeconds: 0
+      # initContainers:
+      # - name: "sysctl"
+      #   image: "busybox"
+      #   imagePullPolicy: IfNotPresent
+      #   command: ['sh', '-c', 'sysctl -w net.core.somaxconn=16000 && sysctl -w net.ipv4.tcp_max_syn_backlog=16000 && sysctl -w net.ipv4.tcp_fin_timeout=5 && sysctl -w vm.swappiness=0']
+      #   securityContext:
+      #     runAsUser: 0
+      #    privileged: true
       containers:
       - name: client
         image: hortonworks/dnstest:1.0-SNAPSHOT
@@ -92,12 +93,14 @@ spec:
           - name: SERVER_PORT
             value: "9999"
           - name: SERVER_CONCURRENCY
-            value: "20"
+            value: "1"
           - name: ITERATIONS
-            value: "20"
+            value: "10"
           - name: INTERVAL
-            value: "100"
+            value: "1000"
           - name: MAIN_CLASS
             value: "PingRPCClient"
           - name: INITIAL_SLEEP
             value: "5"
+          - name: LOG_LEVEL
+            value: "DEBUG"
